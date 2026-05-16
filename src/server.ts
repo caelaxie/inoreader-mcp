@@ -14,6 +14,21 @@ const getUserInfoToolName = "inoreader_get_user_info";
 const listSubscriptionsToolName = "inoreader_list_subscriptions";
 const getUnreadCountsToolName = "inoreader_get_unread_counts";
 const getStreamContentsToolName = "inoreader_get_stream_contents";
+const markReadToolName = "inoreader_mark_read";
+const markUnreadToolName = "inoreader_mark_unread";
+const starArticleToolName = "inoreader_star_article";
+const unstarArticleToolName = "inoreader_unstar_article";
+const likeArticleToolName = "inoreader_like_article";
+const unlikeArticleToolName = "inoreader_unlike_article";
+const broadcastArticleToolName = "inoreader_broadcast_article";
+const unbroadcastArticleToolName = "inoreader_unbroadcast_article";
+const addArticleTagToolName = "inoreader_add_article_tag";
+const removeArticleTagToolName = "inoreader_remove_article_tag";
+const editSubscriptionToolName = "inoreader_edit_subscription";
+const followSubscriptionToolName = "inoreader_follow_subscription";
+const unfollowSubscriptionToolName = "inoreader_unfollow_subscription";
+const renameTagToolName = "inoreader_rename_tag";
+const deleteTagToolName = "inoreader_delete_tag";
 
 export interface InoreaderMcpServer {
   readonly metadata: {
@@ -73,6 +88,27 @@ export const createInoreaderMcpServer = (
 
     return jsonText(payload);
   };
+  const itemIdsSchema = z.object({
+    itemIds: z.array(z.string().min(1)).min(1)
+  });
+  const subscriptionEditSchema = z.object({
+    streamId: z.string().min(1),
+    title: z.string().min(1).optional(),
+    addFolderId: z.string().min(1).optional(),
+    removeFolderId: z.string().min(1).optional()
+  });
+  const compactSubscriptionOptions = (
+    input: z.infer<typeof subscriptionEditSchema>
+  ) => ({
+    streamId: input.streamId,
+    ...(input.title === undefined ? {} : { title: input.title }),
+    ...(input.addFolderId === undefined
+      ? {}
+      : { addFolderId: input.addFolderId }),
+    ...(input.removeFolderId === undefined
+      ? {}
+      : { removeFolderId: input.removeFolderId })
+  });
 
   server.registerTool(
     statusToolName,
@@ -161,6 +197,159 @@ export const createInoreaderMcpServer = (
       )
   );
 
+  server.registerTool(
+    markReadToolName,
+    {
+      description: "Mark Inoreader article items as read.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.markRead(itemIds))
+  );
+
+  server.registerTool(
+    markUnreadToolName,
+    {
+      description: "Mark Inoreader article items as unread.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.markUnread(itemIds))
+  );
+
+  server.registerTool(
+    starArticleToolName,
+    {
+      description: "Star Inoreader article items.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.star(itemIds))
+  );
+
+  server.registerTool(
+    unstarArticleToolName,
+    {
+      description: "Remove stars from Inoreader article items.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.unstar(itemIds))
+  );
+
+  server.registerTool(
+    likeArticleToolName,
+    {
+      description: "Like Inoreader article items.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.like(itemIds))
+  );
+
+  server.registerTool(
+    unlikeArticleToolName,
+    {
+      description: "Remove likes from Inoreader article items.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.unlike(itemIds))
+  );
+
+  server.registerTool(
+    broadcastArticleToolName,
+    {
+      description: "Broadcast Inoreader article items.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.broadcast(itemIds))
+  );
+
+  server.registerTool(
+    unbroadcastArticleToolName,
+    {
+      description: "Remove broadcasts from Inoreader article items.",
+      inputSchema: itemIdsSchema
+    },
+    async ({ itemIds }) => runTool(client.unbroadcast(itemIds))
+  );
+
+  server.registerTool(
+    addArticleTagToolName,
+    {
+      description: "Add a custom Inoreader tag to article items.",
+      inputSchema: z.object({
+        itemIds: z.array(z.string().min(1)).min(1),
+        tagName: z.string().min(1)
+      })
+    },
+    async ({ itemIds, tagName }) =>
+      runTool(client.addArticleTag(itemIds, tagName))
+  );
+
+  server.registerTool(
+    removeArticleTagToolName,
+    {
+      description: "Remove a custom Inoreader tag from article items.",
+      inputSchema: z.object({
+        itemIds: z.array(z.string().min(1)).min(1),
+        tagName: z.string().min(1)
+      })
+    },
+    async ({ itemIds, tagName }) =>
+      runTool(client.removeArticleTag(itemIds, tagName))
+  );
+
+  server.registerTool(
+    editSubscriptionToolName,
+    {
+      description: "Rename a subscription or add/remove it from folders.",
+      inputSchema: subscriptionEditSchema
+    },
+    async (input) =>
+      runTool(client.editSubscription(compactSubscriptionOptions(input)))
+  );
+
+  server.registerTool(
+    followSubscriptionToolName,
+    {
+      description: "Follow a feed and optionally rename it or add it to a folder.",
+      inputSchema: subscriptionEditSchema
+    },
+    async (input) =>
+      runTool(client.followSubscription(compactSubscriptionOptions(input)))
+  );
+
+  server.registerTool(
+    unfollowSubscriptionToolName,
+    {
+      description: "Unfollow an Inoreader feed.",
+      inputSchema: z.object({
+        streamId: z.string().min(1)
+      })
+    },
+    async ({ streamId }) => runTool(client.unfollowSubscription(streamId))
+  );
+
+  server.registerTool(
+    renameTagToolName,
+    {
+      description: "Rename an Inoreader tag or folder.",
+      inputSchema: z.object({
+        sourceTagId: z.string().min(1),
+        destinationName: z.string().min(1)
+      })
+    },
+    async ({ sourceTagId, destinationName }) =>
+      runTool(client.renameTag(sourceTagId, destinationName))
+  );
+
+  server.registerTool(
+    deleteTagToolName,
+    {
+      description: "Delete an Inoreader tag or folder.",
+      inputSchema: z.object({
+        tagId: z.string().min(1)
+      })
+    },
+    async ({ tagId }) => runTool(client.deleteTag(tagId))
+  );
+
   return {
     metadata,
     server,
@@ -169,7 +358,22 @@ export const createInoreaderMcpServer = (
       getUserInfoToolName,
       listSubscriptionsToolName,
       getUnreadCountsToolName,
-      getStreamContentsToolName
+      getStreamContentsToolName,
+      markReadToolName,
+      markUnreadToolName,
+      starArticleToolName,
+      unstarArticleToolName,
+      likeArticleToolName,
+      unlikeArticleToolName,
+      broadcastArticleToolName,
+      unbroadcastArticleToolName,
+      addArticleTagToolName,
+      removeArticleTagToolName,
+      editSubscriptionToolName,
+      followSubscriptionToolName,
+      unfollowSubscriptionToolName,
+      renameTagToolName,
+      deleteTagToolName
     ]
   };
 };
