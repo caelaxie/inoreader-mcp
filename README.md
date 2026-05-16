@@ -1,52 +1,58 @@
-# inoreader-mcp
+# Inoreader MCP
 
-Local MCP server for Inoreader.
+## Set up Inoreader MCP
 
-## Setup
+This MCP server runs over stdio and is designed to be launched by an AI agent with `npx`.
 
-```bash
-pnpm install
-pnpm build
-```
+### Codex
 
-## Run
+1. Open your Codex config file:
 
 ```bash
-pnpm dev
+$EDITOR ~/.codex/config.toml
 ```
 
-The server uses MCP stdio transport, so MCP clients should run the built binary:
+2. Add this MCP server entry:
+
+```toml
+[mcp_servers.inoreader]
+command = "npx"
+args = ["-y", "inoreader-mcp"]
+env = { "INOREADER_ACCESS_TOKEN" = "your-token" }
+```
+
+3. Restart Codex.
+4. Ask Codex to use the Inoreader MCP tools.
+
+### OpenCode
+
+1. Open your OpenCode config file:
 
 ```bash
-pnpm build
-node dist/index.js
+$EDITOR ~/.config/opencode/opencode.json
 ```
 
-Environment:
+2. Add this MCP server entry inside the top-level `mcp` object:
 
-```bash
-INOREADER_API_BASE_URL=https://www.inoreader.com/reader/api/0
-INOREADER_ACCESS_TOKEN=your-token
+```json
+{
+  "mcp": {
+    "inoreader": {
+      "type": "local",
+      "command": ["npx", "-y", "inoreader-mcp"],
+      "enabled": true,
+      "environment": {
+        "INOREADER_ACCESS_TOKEN": "your-token"
+      }
+    }
+  }
+}
 ```
 
-`INOREADER_ACCESS_TOKEN` is required for authenticated Inoreader tools. The status tool can run without it and reports only whether the token is configured.
+3. Restart OpenCode.
+4. Ask OpenCode to use the Inoreader MCP tools.
 
-## MCP Responses
-
-Successful API-backed tools return concise text for the model and `structuredContent` for MCP clients that consume JSON output programmatically.
-
-API and client failures are returned as MCP tool-level errors with `isError: true` and a readable message. They are not thrown as protocol errors unless the MCP server itself cannot handle the request.
-
-Read tools are annotated as read-only and idempotent. Write tools are annotated as state-changing, and operations that remove or hide user-visible Inoreader state are marked destructive.
-
-## Scripts
-
-```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
+`INOREADER_ACCESS_TOKEN` is required for authenticated Inoreader tools. `INOREADER_API_BASE_URL` is optional and defaults to `https://www.inoreader.com/reader/api/0`.
 
 ## Current Tools
 
@@ -70,3 +76,27 @@ pnpm build
 - `inoreader_unfollow_subscription`: unfollows a feed.
 - `inoreader_rename_tag`: renames a tag or folder.
 - `inoreader_delete_tag`: deletes a tag or folder.
+
+## Developers
+
+Install dependencies and build the server:
+
+```bash
+pnpm install
+pnpm build
+```
+
+Run the server locally:
+
+```bash
+pnpm dev
+```
+
+Run checks before changing release metadata or publishing:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
