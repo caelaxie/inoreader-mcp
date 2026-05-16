@@ -9,7 +9,8 @@ const config = {
   appName: "inoreader-mcp",
   appVersion: "1.0.0",
   inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-  inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token"
+  inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token",
+  inoreaderOAuthScope: "read write"
 };
 
 const makeFakeClient = (

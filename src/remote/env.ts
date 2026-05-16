@@ -4,6 +4,7 @@ export interface InoreaderRemoteEnv {
   readonly INOREADER_APP_KEY: string;
   readonly INOREADER_API_BASE_URL?: string;
   readonly INOREADER_OAUTH_TOKEN_URL?: string;
+  readonly INOREADER_OAUTH_SCOPE?: string;
 }
 
 export const defaultInoreaderApiBaseUrl =

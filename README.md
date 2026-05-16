@@ -75,6 +75,12 @@ Use your deployed Worker callback URL as the redirect URI:
 https://<your-worker-domain>/callback
 ```
 
+Set the Inoreader app access level to read/write. The Worker requests the
+`read write` OAuth scope because the MCP server exposes both read tools and
+write tools such as mark read, star, tag, and subscription edits. If the
+Inoreader app is set to read only, the Connect Inoreader flow will fail with
+`invalid_scope`.
+
 Inoreader labels the OAuth credentials as `App ID` and `App key`.
 
 4. Set Cloudflare Worker secrets from the Inoreader `App ID` and `App key`:
