@@ -5,7 +5,6 @@ import {
 } from "@effect/platform";
 import { Effect, Schema } from "effect";
 
-import type { InoreaderMcpConfig } from "../config.js";
 import {
   InoreaderAuthError,
   type InoreaderClientError,
@@ -25,6 +24,7 @@ import {
   type UnreadCounts,
   type UserInfo
 } from "./schemas.js";
+import type { InoreaderAccessTokenProvider } from "./oauth.js";
 
 export interface InoreaderHttpRequest {
   readonly method: "GET" | "POST";
@@ -41,6 +41,8 @@ export interface InoreaderHttpResponse {
 export type InoreaderHttpTransport = (
   request: InoreaderHttpRequest
 ) => Effect.Effect<InoreaderHttpResponse, InoreaderClientError>;
+
+export type { InoreaderAccessTokenProvider } from "./oauth.js";
 
 export const createLiveInoreaderHttpTransport =
   (baseUrl: string): InoreaderHttpTransport =>
@@ -190,7 +192,7 @@ const decodeResponse = <S extends Schema.Schema.Any>(
   >;
 
 export const createInoreaderClient = (
-  config: InoreaderMcpConfig,
+  accessTokenProvider: InoreaderAccessTokenProvider,
   transport: InoreaderHttpTransport
 ): InoreaderClient => {
   const request = <S extends Schema.Schema.Any>(
@@ -204,14 +206,7 @@ export const createInoreaderClient = (
     Schema.Schema.Context<S>
   > =>
     Effect.gen(function* () {
-      const token = config.inoreaderAccessToken;
-      if (!token) {
-        return yield* Effect.fail(
-          new InoreaderAuthError({
-            message: "INOREADER_ACCESS_TOKEN is required for this tool"
-          })
-        );
-      }
+      const token = yield* accessTokenProvider();
 
       const response = yield* transport({
         method,

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   createInoreaderClient,
+  type InoreaderAccessTokenProvider,
   type InoreaderHttpTransport
 } from "../src/inoreader/client.js";
+import { InoreaderAuthError } from "../src/inoreader/errors.js";
 import {
   OkResponseSchema,
   StreamContentsSchema,
@@ -93,6 +95,9 @@ describe("Inoreader schemas", () => {
 });
 
 describe("createInoreaderClient", () => {
+  const accessTokenProvider: InoreaderAccessTokenProvider = () =>
+    Effect.succeed("oauth-access-token");
+
   it("sends bearer authentication on read requests", async () => {
     const requests: Parameters<InoreaderHttpTransport>[0][] = [];
     const transport: InoreaderHttpTransport = (request) =>
@@ -112,22 +117,14 @@ describe("createInoreaderClient", () => {
         };
       });
 
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      transport
-    );
+    const client = createInoreaderClient(accessTokenProvider, transport);
 
     await Effect.runPromise(client.getUserInfo());
 
     expect(requests[0]).toMatchObject({
       method: "GET",
       path: "/user-info",
-      headers: { Authorization: "Bearer secret-token" }
+      headers: { Authorization: "Bearer oauth-access-token" }
     });
   });
 
@@ -139,15 +136,7 @@ describe("createInoreaderClient", () => {
         return { status: 200, body: "OK" };
       });
 
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      transport
-    );
+    const client = createInoreaderClient(accessTokenProvider, transport);
 
     await Effect.runPromise(client.markRead(["item-1", "item-2"]));
 
@@ -158,13 +147,14 @@ describe("createInoreaderClient", () => {
     ]);
   });
 
-  it("fails authenticated methods when the token is missing", async () => {
+  it("fails authenticated methods when OAuth token retrieval fails", async () => {
     const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0"
-      },
+      () =>
+        Effect.fail(
+          new InoreaderAuthError({
+            message: "Inoreader OAuth token refresh failed"
+          })
+        ),
       () => Effect.succeed({ status: 200, body: "OK" })
     );
 
@@ -176,14 +166,8 @@ describe("createInoreaderClient", () => {
   });
 
   it("maps rate limits to tagged errors", async () => {
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      () => Effect.succeed({ status: 429, body: "Too many requests" })
+    const client = createInoreaderClient(accessTokenProvider, () =>
+      Effect.succeed({ status: 429, body: "Too many requests" })
     );
 
     await expect(
@@ -195,14 +179,8 @@ describe("createInoreaderClient", () => {
 
   it("maps HTTP 401 and 403 responses to auth errors", async () => {
     for (const status of [401, 403]) {
-      const client = createInoreaderClient(
-        {
-          appName: "inoreader-mcp",
-          appVersion: "1.0.0",
-          inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-          inoreaderAccessToken: "secret-token"
-        },
-        () => Effect.succeed({ status, body: "Unauthorized" })
+      const client = createInoreaderClient(accessTokenProvider, () =>
+        Effect.succeed({ status, body: "Unauthorized" })
       );
 
       await expect(
@@ -215,14 +193,8 @@ describe("createInoreaderClient", () => {
   });
 
   it("maps invalid response bodies to decode errors", async () => {
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      () => Effect.succeed({ status: 200, body: { unexpected: true } })
+    const client = createInoreaderClient(accessTokenProvider, () =>
+      Effect.succeed({ status: 200, body: { unexpected: true } })
     );
 
     await expect(
@@ -233,14 +205,8 @@ describe("createInoreaderClient", () => {
   });
 
   it("maps non-auth HTTP failures to HTTP errors with status and body", async () => {
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      () => Effect.succeed({ status: 500, body: { error: "upstream" } })
+    const client = createInoreaderClient(accessTokenProvider, () =>
+      Effect.succeed({ status: 500, body: { error: "upstream" } })
     );
 
     await expect(
@@ -260,15 +226,7 @@ describe("createInoreaderClient", () => {
         return { status: 200, body: "OK" };
       });
 
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      transport
-    );
+    const client = createInoreaderClient(accessTokenProvider, transport);
 
     await Effect.runPromise(
       client.editSubscription({
@@ -300,15 +258,7 @@ describe("createInoreaderClient", () => {
         return { status: 200, body: "OK" };
       });
 
-    const client = createInoreaderClient(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      transport
-    );
+    const client = createInoreaderClient(accessTokenProvider, transport);
 
     await Effect.runPromise(client.renameTag("user/-/label/Old", "New Label"));
     await Effect.runPromise(client.deleteTag("user/-/label/New Label"));

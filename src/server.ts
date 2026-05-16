@@ -13,6 +13,7 @@ import {
   createLiveInoreaderHttpTransport,
   type InoreaderClient
 } from "./inoreader/client.js";
+import { createInoreaderOAuthTokenProvider } from "./inoreader/oauth.js";
 
 const statusToolName = "inoreader_status";
 const getUserInfoToolName = "inoreader_get_user_info";
@@ -43,7 +44,7 @@ const statusOutputSchema = z.object({
   ok: z.literal(true),
   service: z.string(),
   inoreaderApiBaseUrl: z.string(),
-  inoreaderAccessTokenConfigured: z.boolean()
+  inoreaderOAuthConfigured: z.boolean()
 });
 
 const userInfoOutputSchema = z.object({
@@ -135,12 +136,12 @@ export const createInoreaderMcpServer = (
   const client =
     options.client ??
     createInoreaderClient(
-      config,
+      createInoreaderOAuthTokenProvider(config),
       createLiveInoreaderHttpTransport(config.inoreaderApiBaseUrl)
     );
   const server = new McpServer(metadata, {
     instructions:
-      "Use this local MCP server to interact with Inoreader. Configure credentials before calling tools that require account access."
+      "Use this local MCP server to interact with Inoreader. Configure Inoreader OAuth credentials before calling tools that require account access."
   });
 
   const successResult = (
@@ -255,7 +256,11 @@ export const createInoreaderMcpServer = (
         ok: true,
         service: config.appName,
         inoreaderApiBaseUrl: config.inoreaderApiBaseUrl,
-        inoreaderAccessTokenConfigured: Boolean(config.inoreaderAccessToken)
+        inoreaderOAuthConfigured: Boolean(
+          config.inoreaderClientId &&
+            config.inoreaderClientSecret &&
+            config.inoreaderRefreshToken
+        )
       })
   );
 
