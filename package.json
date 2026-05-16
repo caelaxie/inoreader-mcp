@@ -15,8 +15,17 @@
     "build": "tsup",
     "dev": "tsx src/index.ts",
     "lint": "eslint src test *.config.ts",
+    "prepack": "pnpm build",
+    "release:check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm pack --dry-run",
+    "release:major": "pnpm release:check && pnpm version major && pnpm publish --access public && git push --follow-tags",
+    "release:minor": "pnpm release:check && pnpm version minor && pnpm publish --access public && git push --follow-tags",
+    "release:patch": "pnpm release:check && pnpm version patch && pnpm publish --access public && git push --follow-tags",
+    "release:publish": "pnpm release:check && pnpm publish --access public",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "inoreader",
