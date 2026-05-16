@@ -1,5 +1,5 @@
 {
-  "name": "inoreader-mcp",
+  "name": "@caelaxie/inoreader-mcp",
   "version": "1.0.0",
   "description": "Local MCP server for Inoreader.",
   "type": "module",
