@@ -13,6 +13,10 @@ import {
   InoreaderCredentials
 } from "./remote/credentials-object.js";
 import type { InoreaderRemoteEnv } from "./remote/env.js";
+import {
+  createInoreaderAuthorizeUrl,
+  getInoreaderOAuthCallbackError
+} from "./remote/oauth.js";
 
 export { InoreaderCredentials };
 
@@ -144,6 +148,7 @@ const beginInoreaderOAuth = async (
 ): Promise<Response> => {
   const appId = requiredEnv(env.INOREADER_APP_ID, "INOREADER_APP_ID");
   requiredEnv(env.INOREADER_APP_KEY, "INOREADER_APP_KEY");
+  const config = await Effect.runPromise(loadConfig(remoteEnvSource(env)));
   const state = crypto.randomUUID();
   const redirectUri = new URL(callbackPath, request.url).toString();
 
@@ -153,12 +158,12 @@ const beginInoreaderOAuth = async (
     body: JSON.stringify({ state })
   });
 
-  const authorizeUrl = new URL("https://www.inoreader.com/oauth2/auth");
-  authorizeUrl.searchParams.set("client_id", appId);
-  authorizeUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("scope", "read write");
-  authorizeUrl.searchParams.set("state", state);
+  const authorizeUrl = createInoreaderAuthorizeUrl({
+    appId,
+    redirectUri,
+    scope: config.inoreaderOAuthScope,
+    state
+  });
 
   return Response.redirect(authorizeUrl.toString(), 302);
 };
@@ -168,6 +173,11 @@ const completeInoreaderOAuth = async (
   env: InoreaderRemoteEnv
 ): Promise<Response> => {
   const url = new URL(request.url);
+  const callbackError = getInoreaderOAuthCallbackError(url);
+  if (callbackError) {
+    return new Response(callbackError, { status: 400 });
+  }
+
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   if (!code || !state) {
@@ -214,7 +224,8 @@ const remoteEnvSource = (
   env: InoreaderRemoteEnv
 ): Record<string, string | undefined> => ({
   INOREADER_API_BASE_URL: env.INOREADER_API_BASE_URL,
-  INOREADER_OAUTH_TOKEN_URL: env.INOREADER_OAUTH_TOKEN_URL
+  INOREADER_OAUTH_TOKEN_URL: env.INOREADER_OAUTH_TOKEN_URL,
+  INOREADER_OAUTH_SCOPE: env.INOREADER_OAUTH_SCOPE
 });
 
 const html = (body: string): Response =>

@@ -2,12 +2,14 @@ import { Data, Effect } from "effect";
 
 const defaultInoreaderApiBaseUrl = "https://www.inoreader.com/reader/api/0";
 const defaultInoreaderOAuthTokenUrl = "https://www.inoreader.com/oauth2/token";
+const defaultInoreaderOAuthScope = "read write";
 
 export interface InoreaderMcpConfig {
   readonly appName: string;
   readonly appVersion: string;
   readonly inoreaderApiBaseUrl: string;
   readonly inoreaderOAuthTokenUrl: string;
+  readonly inoreaderOAuthScope: string;
 }
 
 export class ConfigError extends Data.TaggedError("ConfigError")<{
@@ -24,6 +26,8 @@ export const loadConfig = (
       env.INOREADER_API_BASE_URL ?? defaultInoreaderApiBaseUrl;
     const inoreaderOAuthTokenUrl =
       env.INOREADER_OAUTH_TOKEN_URL ?? defaultInoreaderOAuthTokenUrl;
+    const inoreaderOAuthScope =
+      env.INOREADER_OAUTH_SCOPE ?? defaultInoreaderOAuthScope;
 
     yield* validateAbsoluteUrl(
       "INOREADER_API_BASE_URL",
@@ -33,12 +37,14 @@ export const loadConfig = (
       "INOREADER_OAUTH_TOKEN_URL",
       inoreaderOAuthTokenUrl
     );
+    yield* validateOAuthScope(inoreaderOAuthScope);
 
     return {
       appName: "inoreader-mcp",
       appVersion: "1.0.0",
       inoreaderApiBaseUrl,
-      inoreaderOAuthTokenUrl
+      inoreaderOAuthTokenUrl,
+      inoreaderOAuthScope
     };
   });
 
@@ -58,3 +64,18 @@ const validateAbsoluteUrl = (
         message: `${name} must be an absolute URL`
       })
   });
+
+const validateOAuthScope = (
+  value: string
+): Effect.Effect<void, ConfigError> =>
+  Effect.sync(() => value.trim()).pipe(
+    Effect.flatMap((scope) =>
+      scope === "read" || scope === "read write"
+        ? Effect.void
+        : Effect.fail(
+            new ConfigError({
+              message: "INOREADER_OAUTH_SCOPE must be read or read write"
+            })
+          )
+    )
+  );

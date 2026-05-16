@@ -20,6 +20,14 @@
   ],
   "vars": {
     "INOREADER_API_BASE_URL": "https://www.inoreader.com/reader/api/0",
-    "INOREADER_OAUTH_TOKEN_URL": "https://www.inoreader.com/oauth2/token"
+    "INOREADER_OAUTH_TOKEN_URL": "https://www.inoreader.com/oauth2/token",
+    "INOREADER_OAUTH_SCOPE": "read write"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": true,
+      "head_sampling_rate": 1
+    }
   }
 }

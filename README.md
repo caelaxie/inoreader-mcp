@@ -13,15 +13,55 @@ pnpm wrangler login
 
 2. Choose the deployed Worker URL.
 
-By default this project deploys the Worker named `inoreader-mcp`. Use the final
-Worker URL from your Cloudflare account, for example:
+By default this project deploys the Worker named `inoreader-mcp`. Use either a
+`workers.dev` hostname or a custom hostname that belongs to a Cloudflare zone.
+
+To enable the default `workers.dev` deployment URL, add `workers_dev` to
+`wrangler.jsonc`:
+
+```jsonc
+{
+  "name": "inoreader-mcp",
+  "workers_dev": true
+}
+```
+
+Then use the final Worker URL from your Cloudflare account, for example:
 
 ```text
 https://inoreader-mcp.<your-workers-subdomain>.workers.dev
 ```
 
-If you use a custom domain or route, update `wrangler.jsonc` first and use that
-host instead.
+To use a custom domain where the Worker is the origin, add a `routes` entry with
+`custom_domain: true`:
+
+```jsonc
+{
+  "routes": [
+    {
+      "pattern": "reader.example.com",
+      "custom_domain": true
+    }
+  ]
+}
+```
+
+If you need the Worker to run in front of an existing origin instead, configure a
+route for a proxied DNS record:
+
+```jsonc
+{
+  "routes": [
+    {
+      "pattern": "reader.example.com/*",
+      "zone_name": "example.com"
+    }
+  ]
+}
+```
+
+After choosing the host, use it consistently for Inoreader OAuth, Cloudflare
+Access, and MCP client configuration.
 
 3. Register an app in Inoreader preferences:
 
@@ -34,6 +74,12 @@ Use your deployed Worker callback URL as the redirect URI:
 ```text
 https://<your-worker-domain>/callback
 ```
+
+Set the Inoreader app access level to read/write. The Worker requests the
+`read write` OAuth scope because the MCP server exposes both read tools and
+write tools such as mark read, star, tag, and subscription edits. If the
+Inoreader app is set to read only, the Connect Inoreader flow will fail with
+`invalid_scope`.
 
 Inoreader labels the OAuth credentials as `App ID` and `App key`.
 
@@ -62,9 +108,20 @@ https://inoreader-mcp.<your-workers-subdomain>.workers.dev/status
 https://inoreader-mcp.<your-workers-subdomain>.workers.dev/mcp
 ```
 
-Add an Allow policy for your email address on `/setup` and `/authorize`. For
-non-browser MCP clients, create an Access service token and add it to an Allow
-policy for `/mcp`.
+Add an Allow policy for your email address on `/setup` and `/authorize`.
+
+For non-browser MCP clients, create a Cloudflare Access service token and use it
+for `/mcp`:
+
+1. In the Cloudflare Zero Trust dashboard, open Access, then Service Auth.
+2. Create a service token, for example `inoreader-mcp-codex`, and save the
+   generated Client ID and Client Secret. Cloudflare shows the secret once.
+3. Open the Access application that protects
+   `https://<your-worker-domain>/mcp`.
+4. Add a policy with Action set to Service Auth.
+5. In the Include rules, choose Service Token and select the specific token you
+   created. Do not use Any Access Service Token unless you intentionally want
+   every service token in scope to reach `/mcp`.
 
 Do not protect `/callback` with Cloudflare Access. Inoreader must be able to
 redirect the browser back to that path after OAuth, and Inoreader cannot send
@@ -177,6 +234,25 @@ Run locally with Wrangler:
 
 ```bash
 pnpm dev
+```
+
+Wrangler serves the local Worker at `http://localhost:8787` by default. If you
+need a different local port, add a `dev` block to `wrangler.jsonc`:
+
+```jsonc
+{
+  "dev": {
+    "port": 8788,
+    "local_protocol": "http"
+  }
+}
+```
+
+For a preview that runs on Cloudflare infrastructure and connects to remote
+bindings, use Wrangler remote development:
+
+```bash
+pnpm wrangler dev --remote
 ```
 
 Run checks:
