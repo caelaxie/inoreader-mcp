@@ -14,6 +14,12 @@ describe("createInoreaderMcpServer", () => {
       name: "inoreader-mcp",
       version: "1.0.0"
     });
-    expect(server.toolNames).toEqual(["inoreader_status"]);
+    expect(server.toolNames).toEqual([
+      "inoreader_status",
+      "inoreader_get_user_info",
+      "inoreader_list_subscriptions",
+      "inoreader_get_unread_counts",
+      "inoreader_get_stream_contents"
+    ]);
   });
 });
