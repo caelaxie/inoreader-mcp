@@ -118,7 +118,7 @@ describe("createInoreaderMcpServer", () => {
     expect(starArticleMetadata?.outputSchema).toBeDefined();
   });
 
-  it("returns concise text and structured content for successful write tool calls", async () => {
+  it("returns visible payload text and structured content for successful write tool calls", async () => {
     const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
 
     const tool = server.registeredTools.find(
@@ -131,14 +131,14 @@ describe("createInoreaderMcpServer", () => {
       content: [
         {
           type: "text",
-          text: "Starred Inoreader article items."
+          text: 'Starred Inoreader article items.\n\n{\n  "ok": true\n}'
         }
       ],
       structuredContent: { ok: true }
     });
   });
 
-  it("returns concise text and structured content for successful tool calls", async () => {
+  it("returns visible payload text and structured content for successful read tool calls", async () => {
     const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
 
     const tool = server.registeredTools.find(
@@ -151,12 +151,18 @@ describe("createInoreaderMcpServer", () => {
       content: [
         {
           type: "text",
-          text: "Fetched authenticated Inoreader user info."
+          text:
+            'Fetched authenticated Inoreader user info.\n\n{\n  "userId": "1001921515",\n  "userName": "reader",\n  "userProfileId": "1001921515",\n  "userEmail": "reader@example.test",\n  "isBloggerUser": false,\n  "signupTimeSec": 1163850013,\n  "isMultiLoginEnabled": false\n}'
         }
       ],
       structuredContent: {
+        userId: "1001921515",
         userName: "reader",
-        userEmail: "reader@example.test"
+        userProfileId: "1001921515",
+        userEmail: "reader@example.test",
+        isBloggerUser: false,
+        signupTimeSec: 1163850013,
+        isMultiLoginEnabled: false
       }
     });
   });
@@ -208,7 +214,8 @@ describe("createInoreaderMcpServer", () => {
       content: [
         {
           type: "text",
-          text: "Inoreader MCP server configuration loaded."
+          text:
+            'Inoreader MCP server configuration loaded.\n\n{\n  "ok": true,\n  "service": "inoreader-mcp",\n  "inoreaderApiBaseUrl": "https://www.inoreader.com/reader/api/0",\n  "inoreaderOAuthConfigured": true\n}'
         }
       ],
       structuredContent: {
