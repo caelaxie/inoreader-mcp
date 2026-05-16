@@ -18,11 +18,19 @@ $EDITOR ~/.codex/config.toml
 [mcp_servers.inoreader]
 command = "npx"
 args = ["-y", "@caelaxie/inoreader-mcp"]
-env = { "INOREADER_ACCESS_TOKEN" = "your-token" }
 ```
 
-3. Restart Codex.
-4. Ask Codex to use the Inoreader MCP tools.
+3. Save your Inoreader OAuth credentials once:
+
+```bash
+npx -y @caelaxie/inoreader-mcp auth save \
+  --client-id "your-client-id" \
+  --client-secret "your-client-secret" \
+  --refresh-token "your-refresh-token"
+```
+
+4. Restart Codex.
+5. Ask Codex to use the Inoreader MCP tools.
 
 ### OpenCode
 
@@ -40,23 +48,33 @@ $EDITOR ~/.config/opencode/opencode.json
     "inoreader": {
       "type": "local",
       "command": ["npx", "-y", "@caelaxie/inoreader-mcp"],
-      "enabled": true,
-      "environment": {
-        "INOREADER_ACCESS_TOKEN": "your-token"
-      }
+      "enabled": true
     }
   }
 }
 ```
 
-3. Restart OpenCode.
-4. Ask OpenCode to use the Inoreader MCP tools.
+3. Save your Inoreader OAuth credentials once:
 
-`INOREADER_ACCESS_TOKEN` is required for authenticated Inoreader tools. `INOREADER_API_BASE_URL` is optional and defaults to `https://www.inoreader.com/reader/api/0`.
+```bash
+npx -y @caelaxie/inoreader-mcp auth save \
+  --client-id "your-client-id" \
+  --client-secret "your-client-secret" \
+  --refresh-token "your-refresh-token"
+```
+
+4. Restart OpenCode.
+5. Ask OpenCode to use the Inoreader MCP tools.
+
+`auth save` writes OAuth secrets to the system keyring under the `inoreader-mcp` service and stores only non-secret URL overrides in `~/.config/inoreader-mcp/config.json`. After that, MCP clients can launch this server without environment variables. `INOREADER_CLIENT_ID`, `INOREADER_CLIENT_SECRET`, and `INOREADER_REFRESH_TOKEN` are still supported as automation overrides. The MCP server refreshes Inoreader OAuth access tokens in memory and does not accept a static access-token environment variable.
+
+Use Inoreader's OAuth developer flow or OAuth Playground setup to obtain the refresh token for your registered Inoreader app.
+
+`INOREADER_API_BASE_URL` is optional and defaults to `https://www.inoreader.com/reader/api/0`. `INOREADER_OAUTH_TOKEN_URL` is optional and defaults to `https://www.inoreader.com/oauth2/token`.
 
 ## Current Tools
 
-- `inoreader_status`: reports the configured Inoreader API base URL and whether an access token is configured.
+- `inoreader_status`: reports the configured Inoreader API base URL and whether OAuth credentials are configured.
 - `inoreader_get_user_info`: fetches authenticated account information.
 - `inoreader_list_subscriptions`: lists feeds and subscriptions.
 - `inoreader_get_unread_counts`: returns unread counters for feeds, folders, and tags.
@@ -91,6 +109,17 @@ Run the server locally:
 ```bash
 pnpm dev
 ```
+
+Save local credentials while developing:
+
+```bash
+pnpm dev auth save \
+  --client-id "your-client-id" \
+  --client-secret "your-client-secret" \
+  --refresh-token "your-refresh-token"
+```
+
+On Linux, the system keyring must be available and unlocked for `auth save` and MCP startup to read saved credentials.
 
 Run checks before changing release metadata or publishing:
 

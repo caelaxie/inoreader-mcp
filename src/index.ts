@@ -2,10 +2,16 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Effect } from "effect";
 
+import { runCliCommand } from "./cli.js";
 import { loadConfig } from "./config.js";
 import { createInoreaderMcpServer } from "./server.js";
 
 const program = Effect.gen(function* () {
+  const commandHandled = yield* runCliCommand(process.argv);
+  if (commandHandled) {
+    return;
+  }
+
   const config = yield* loadConfig();
   const { server } = createInoreaderMcpServer(config);
   const transport = new StdioServerTransport();

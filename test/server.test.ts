@@ -5,6 +5,16 @@ import type { InoreaderClient } from "../src/inoreader/client.js";
 import { InoreaderAuthError } from "../src/inoreader/errors.js";
 import { createInoreaderMcpServer } from "../src/server.js";
 
+const config = {
+  appName: "inoreader-mcp",
+  appVersion: "1.0.0",
+  inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+  inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token",
+  inoreaderClientId: "client-id",
+  inoreaderClientSecret: "client-secret",
+  inoreaderRefreshToken: "refresh-token"
+};
+
 const makeFakeClient = (
   overrides: Partial<InoreaderClient> = {}
 ): InoreaderClient => ({
@@ -50,11 +60,7 @@ const makeFakeClient = (
 
 describe("createInoreaderMcpServer", () => {
   it("creates a named MCP server without connecting a transport", () => {
-    const server = createInoreaderMcpServer({
-      appName: "inoreader-mcp",
-      appVersion: "1.0.0",
-      inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0"
-    });
+    const server = createInoreaderMcpServer(config);
 
     expect(server.metadata).toEqual({
       name: "inoreader-mcp",
@@ -115,15 +121,7 @@ describe("createInoreaderMcpServer", () => {
   });
 
   it("returns concise text and structured content for successful write tool calls", async () => {
-    const server = createInoreaderMcpServer(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      { client: makeFakeClient() }
-    );
+    const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
 
     const tool = server.registeredTools.find(
       ({ name }) => name === "inoreader_star_article"
@@ -143,15 +141,7 @@ describe("createInoreaderMcpServer", () => {
   });
 
   it("returns concise text and structured content for successful tool calls", async () => {
-    const server = createInoreaderMcpServer(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-        inoreaderAccessToken: "secret-token"
-      },
-      { client: makeFakeClient() }
-    );
+    const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
 
     const tool = server.registeredTools.find(
       ({ name }) => name === "inoreader_get_user_info"
@@ -175,17 +165,13 @@ describe("createInoreaderMcpServer", () => {
 
   it("returns isError for API client failures", async () => {
     const server = createInoreaderMcpServer(
-      {
-        appName: "inoreader-mcp",
-        appVersion: "1.0.0",
-        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0"
-      },
+      config,
       {
         client: makeFakeClient({
           getUserInfo: () =>
             Effect.fail(
               new InoreaderAuthError({
-                message: "INOREADER_ACCESS_TOKEN is required for this tool"
+                message: "Inoreader OAuth token refresh failed"
               })
             )
         })
@@ -203,9 +189,33 @@ describe("createInoreaderMcpServer", () => {
       content: [
         {
           type: "text",
-          text: "INOREADER_ACCESS_TOKEN is required for this tool"
+          text: "Inoreader OAuth token refresh failed"
         }
       ]
+    });
+  });
+
+  it("reports OAuth configuration in the status tool", async () => {
+    const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
+    const tool = server.registeredTools.find(
+      ({ name }) => name === "inoreader_status"
+    );
+
+    const result = await tool?.handler({});
+
+    expect(result).toEqual({
+      content: [
+        {
+          type: "text",
+          text: "Inoreader MCP server configuration loaded."
+        }
+      ],
+      structuredContent: {
+        ok: true,
+        service: "inoreader-mcp",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderOAuthConfigured: true
+      }
     });
   });
 });
