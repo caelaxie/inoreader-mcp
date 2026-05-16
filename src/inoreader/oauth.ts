@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 
-import type { InoreaderMcpConfig } from "../config.js";
 import { InoreaderAuthError } from "./errors.js";
 
 const expirySkewMs = 60_000;
@@ -25,6 +24,13 @@ export type InoreaderAccessTokenProvider = () => Effect.Effect<
   string,
   InoreaderAuthError
 >;
+
+export interface InoreaderOAuthCredentials {
+  readonly inoreaderOAuthTokenUrl: string;
+  readonly inoreaderClientId: string;
+  readonly inoreaderClientSecret: string;
+  readonly inoreaderRefreshToken: string;
+}
 
 interface CachedToken {
   readonly accessToken: string;
@@ -58,7 +64,7 @@ export const createLiveInoreaderOAuthTokenTransport =
     });
 
 export const createInoreaderOAuthTokenProvider = (
-  config: InoreaderMcpConfig,
+  config: InoreaderOAuthCredentials,
   transport: InoreaderOAuthTokenTransport =
     createLiveInoreaderOAuthTokenTransport()
 ): InoreaderAccessTokenProvider => {
@@ -66,6 +72,19 @@ export const createInoreaderOAuthTokenProvider = (
 
   return () =>
     Effect.gen(function* () {
+      if (
+        !config.inoreaderClientId ||
+        !config.inoreaderClientSecret ||
+        !config.inoreaderRefreshToken
+      ) {
+        return yield* Effect.fail(
+          new InoreaderAuthError({
+            message:
+              "Inoreader OAuth credentials are missing. Visit the remote MCP setup URL first."
+          })
+        );
+      }
+
       const now = Date.now();
       if (cachedToken && cachedToken.expiresAtMs - expirySkewMs > now) {
         return cachedToken.accessToken;

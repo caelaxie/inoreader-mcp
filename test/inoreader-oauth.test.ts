@@ -1,16 +1,13 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import type { InoreaderMcpConfig } from "../src/config.js";
 import {
   createInoreaderOAuthTokenProvider,
+  type InoreaderOAuthCredentials,
   type InoreaderOAuthTokenTransport
 } from "../src/inoreader/oauth.js";
 
-const config: InoreaderMcpConfig = {
-  appName: "inoreader-mcp",
-  appVersion: "1.0.0",
-  inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+const config: InoreaderOAuthCredentials = {
   inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token",
   inoreaderClientId: "client-id",
   inoreaderClientSecret: "client-secret",
