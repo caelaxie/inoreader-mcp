@@ -1,4 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type {
+  CallToolResult,
+  ToolAnnotations
+} from "@modelcontextprotocol/sdk/types.js";
 import { Effect } from "effect";
 import { z } from "zod/v4";
 
@@ -30,6 +35,80 @@ const unfollowSubscriptionToolName = "inoreader_unfollow_subscription";
 const renameTagToolName = "inoreader_rename_tag";
 const deleteTagToolName = "inoreader_delete_tag";
 
+const okOutputSchema = z.object({
+  ok: z.literal(true)
+});
+
+const statusOutputSchema = z.object({
+  ok: z.literal(true),
+  service: z.string(),
+  inoreaderApiBaseUrl: z.string(),
+  inoreaderAccessTokenConfigured: z.boolean()
+});
+
+const userInfoOutputSchema = z.object({
+  userId: z.string(),
+  userName: z.string(),
+  userProfileId: z.string(),
+  userEmail: z.string(),
+  isBloggerUser: z.boolean(),
+  signupTimeSec: z.number(),
+  isMultiLoginEnabled: z.boolean()
+});
+
+const subscriptionListOutputSchema = z.object({
+  subscriptions: z.array(z.record(z.string(), z.unknown()))
+});
+
+const unreadCountsOutputSchema = z.object({
+  max: z.string(),
+  unreadcounts: z.array(z.record(z.string(), z.unknown()))
+});
+
+const streamContentsOutputSchema = z.object({
+  direction: z.string(),
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  updated: z.number(),
+  updatedUsec: z.string(),
+  continuation: z.string().optional(),
+  items: z.array(z.record(z.string(), z.unknown()))
+});
+
+const readToolAnnotations = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  openWorldHint: true
+} as const;
+
+const nonDestructiveWriteAnnotations = {
+  readOnlyHint: false,
+  idempotentHint: true,
+  destructiveHint: false,
+  openWorldHint: true
+} as const;
+
+const destructiveWriteAnnotations = {
+  readOnlyHint: false,
+  idempotentHint: true,
+  destructiveHint: true,
+  openWorldHint: true
+} as const;
+
+export interface InoreaderMcpToolMetadata {
+  readonly name: string;
+  readonly outputSchema: unknown;
+  readonly annotations: unknown;
+}
+
+export interface RegisteredInoreaderTool {
+  readonly name: string;
+  readonly handler: (
+    args: Record<string, unknown>
+  ) => Promise<CallToolResult> | CallToolResult;
+}
+
 export interface InoreaderMcpServer {
   readonly metadata: {
     readonly name: string;
@@ -37,6 +116,8 @@ export interface InoreaderMcpServer {
   };
   readonly server: McpServer;
   readonly toolNames: readonly string[];
+  readonly toolMetadata: readonly InoreaderMcpToolMetadata[];
+  readonly registeredTools: readonly RegisteredInoreaderTool[];
 }
 
 export interface InoreaderMcpServerOptions {
@@ -61,32 +142,82 @@ export const createInoreaderMcpServer = (
     instructions:
       "Use this local MCP server to interact with Inoreader. Configure credentials before calling tools that require account access."
   });
-  const jsonText = (payload: unknown) => ({
+
+  const successResult = (
+    message: string,
+    payload: Record<string, unknown>
+  ): CallToolResult => ({
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(payload, null, 2)
+        text: message
+      }
+    ],
+    structuredContent: payload
+  });
+
+  const errorMessage = (error: unknown): string =>
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null && "message" in error
+        ? String(error.message)
+        : typeof error === "object" && error !== null && "_tag" in error
+          ? String(error._tag)
+          : String(error);
+
+  const errorResult = (error: unknown): CallToolResult => ({
+    isError: true,
+    content: [
+      {
+        type: "text" as const,
+        text: errorMessage(error)
       }
     ]
   });
-  const runTool = async <A>(effect: Effect.Effect<A, unknown>) => {
-    const payload = await Effect.runPromise(
+
+  const toStructuredPayload = (payload: unknown): Record<string, unknown> =>
+    typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>)
+      : { value: payload };
+
+  const runTool = async (
+    effect: Effect.Effect<unknown, unknown>,
+    message: string
+  ): Promise<CallToolResult> =>
+    Effect.runPromise(
       effect.pipe(
-        Effect.catchAll((error) =>
-          Effect.succeed({
-            ok: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : typeof error === "object" && error !== null && "_tag" in error
-                  ? String(error._tag)
-                  : String(error)
-          })
-        )
+        Effect.match({
+          onFailure: errorResult,
+          onSuccess: (payload) =>
+            successResult(message, toStructuredPayload(payload))
+        })
       )
     );
-
-    return jsonText(payload);
+  const toolMetadata: InoreaderMcpToolMetadata[] = [];
+  const registeredTools: RegisteredInoreaderTool[] = [];
+  const registerTool = <
+    InputSchema extends z.ZodType,
+    OutputSchema extends z.ZodType
+  >(
+    name: string,
+    definition: {
+      readonly description: string;
+      readonly inputSchema: InputSchema;
+      readonly outputSchema: OutputSchema;
+      readonly annotations: ToolAnnotations;
+    },
+    handler: ToolCallback<InputSchema>
+  ) => {
+    toolMetadata.push({
+      name,
+      outputSchema: definition.outputSchema,
+      annotations: definition.annotations
+    });
+    registeredTools.push({
+      name,
+      handler: handler as unknown as RegisteredInoreaderTool["handler"]
+    });
+    server.registerTool(name, definition, handler);
   };
   const itemIdsSchema = z.object({
     itemIds: z.array(z.string().min(1)).min(1)
@@ -110,62 +241,68 @@ export const createInoreaderMcpServer = (
       : { removeFolderId: input.removeFolderId })
   });
 
-  server.registerTool(
+  registerTool(
     statusToolName,
     {
       description:
         "Report whether the local Inoreader MCP server is configured and reachable.",
-      inputSchema: z.object({})
+      inputSchema: z.object({}),
+      outputSchema: statusOutputSchema,
+      annotations: readToolAnnotations
     },
-    async () => {
-      const payload = await Effect.runPromise(
-        Effect.succeed({
-          ok: true,
-          service: config.appName,
-          inoreaderApiBaseUrl: config.inoreaderApiBaseUrl,
-          inoreaderAccessTokenConfigured: Boolean(config.inoreaderAccessToken)
-        })
-      );
-
-      return jsonText(payload);
-    }
+    () =>
+      successResult("Inoreader MCP server configuration loaded.", {
+        ok: true,
+        service: config.appName,
+        inoreaderApiBaseUrl: config.inoreaderApiBaseUrl,
+        inoreaderAccessTokenConfigured: Boolean(config.inoreaderAccessToken)
+      })
   );
 
-  server.registerTool(
+  registerTool(
     getUserInfoToolName,
     {
       description: "Fetch basic information for the authenticated Inoreader user.",
-      inputSchema: z.object({})
+      inputSchema: z.object({}),
+      outputSchema: userInfoOutputSchema,
+      annotations: readToolAnnotations
     },
-    async () => runTool(client.getUserInfo())
+    async () =>
+      runTool(client.getUserInfo(), "Fetched authenticated Inoreader user info.")
   );
 
-  server.registerTool(
+  registerTool(
     listSubscriptionsToolName,
     {
       description: "List subscriptions for the authenticated Inoreader user.",
       inputSchema: z.object({
         teamAssets: z.boolean().optional()
-      })
+      }),
+      outputSchema: subscriptionListOutputSchema,
+      annotations: readToolAnnotations
     },
     async ({ teamAssets }) =>
       runTool(
         client.listSubscriptions(
           teamAssets === undefined ? {} : { teamAssets }
-        )
+        ),
+        "Listed Inoreader subscriptions."
       )
   );
 
-  server.registerTool(
+  registerTool(
     getUnreadCountsToolName,
     {
       description: "Fetch unread counts for feeds, folders, and tags.",
-      inputSchema: z.object({})
+      inputSchema: z.object({}),
+      outputSchema: unreadCountsOutputSchema,
+      annotations: readToolAnnotations
     },
-    async () => runTool(client.getUnreadCounts())
+    async () =>
+      runTool(client.getUnreadCounts(), "Fetched Inoreader unread counts.")
   );
 
-  server.registerTool(
+  registerTool(
     getStreamContentsToolName,
     {
       description: "Fetch articles from an Inoreader stream.",
@@ -176,7 +313,9 @@ export const createInoreaderMcpServer = (
         olderThanUnixTime: z.number().int().positive().optional(),
         excludeRead: z.boolean().optional(),
         continuation: z.string().min(1).optional()
-      })
+      }),
+      outputSchema: streamContentsOutputSchema,
+      annotations: readToolAnnotations
     },
     async (input) =>
       runTool(
@@ -193,166 +332,233 @@ export const createInoreaderMcpServer = (
           ...(input.continuation === undefined
             ? {}
             : { continuation: input.continuation })
-        })
+        }),
+        "Fetched Inoreader stream contents."
       )
   );
 
-  server.registerTool(
+  registerTool(
     markReadToolName,
     {
       description: "Mark Inoreader article items as read.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.markRead(itemIds))
+    async ({ itemIds }) =>
+      runTool(client.markRead(itemIds), "Marked Inoreader article items as read.")
   );
 
-  server.registerTool(
+  registerTool(
     markUnreadToolName,
     {
       description: "Mark Inoreader article items as unread.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.markUnread(itemIds))
+    async ({ itemIds }) =>
+      runTool(
+        client.markUnread(itemIds),
+        "Marked Inoreader article items as unread."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     starArticleToolName,
     {
       description: "Star Inoreader article items.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: nonDestructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.star(itemIds))
+    async ({ itemIds }) =>
+      runTool(client.star(itemIds), "Starred Inoreader article items.")
   );
 
-  server.registerTool(
+  registerTool(
     unstarArticleToolName,
     {
       description: "Remove stars from Inoreader article items.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.unstar(itemIds))
+    async ({ itemIds }) =>
+      runTool(client.unstar(itemIds), "Removed stars from Inoreader article items.")
   );
 
-  server.registerTool(
+  registerTool(
     likeArticleToolName,
     {
       description: "Like Inoreader article items.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: nonDestructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.like(itemIds))
+    async ({ itemIds }) =>
+      runTool(client.like(itemIds), "Liked Inoreader article items.")
   );
 
-  server.registerTool(
+  registerTool(
     unlikeArticleToolName,
     {
       description: "Remove likes from Inoreader article items.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.unlike(itemIds))
+    async ({ itemIds }) =>
+      runTool(client.unlike(itemIds), "Removed likes from Inoreader article items.")
   );
 
-  server.registerTool(
+  registerTool(
     broadcastArticleToolName,
     {
       description: "Broadcast Inoreader article items.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: nonDestructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.broadcast(itemIds))
+    async ({ itemIds }) =>
+      runTool(client.broadcast(itemIds), "Broadcast Inoreader article items.")
   );
 
-  server.registerTool(
+  registerTool(
     unbroadcastArticleToolName,
     {
       description: "Remove broadcasts from Inoreader article items.",
-      inputSchema: itemIdsSchema
+      inputSchema: itemIdsSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ itemIds }) => runTool(client.unbroadcast(itemIds))
+    async ({ itemIds }) =>
+      runTool(
+        client.unbroadcast(itemIds),
+        "Removed broadcasts from Inoreader article items."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     addArticleTagToolName,
     {
       description: "Add a custom Inoreader tag to article items.",
       inputSchema: z.object({
         itemIds: z.array(z.string().min(1)).min(1),
         tagName: z.string().min(1)
-      })
+      }),
+      outputSchema: okOutputSchema,
+      annotations: nonDestructiveWriteAnnotations
     },
     async ({ itemIds, tagName }) =>
-      runTool(client.addArticleTag(itemIds, tagName))
+      runTool(
+        client.addArticleTag(itemIds, tagName),
+        "Added an Inoreader tag to article items."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     removeArticleTagToolName,
     {
       description: "Remove a custom Inoreader tag from article items.",
       inputSchema: z.object({
         itemIds: z.array(z.string().min(1)).min(1),
         tagName: z.string().min(1)
-      })
+      }),
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
     async ({ itemIds, tagName }) =>
-      runTool(client.removeArticleTag(itemIds, tagName))
+      runTool(
+        client.removeArticleTag(itemIds, tagName),
+        "Removed an Inoreader tag from article items."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     editSubscriptionToolName,
     {
       description: "Rename a subscription or add/remove it from folders.",
-      inputSchema: subscriptionEditSchema
+      inputSchema: subscriptionEditSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
     async (input) =>
-      runTool(client.editSubscription(compactSubscriptionOptions(input)))
+      runTool(
+        client.editSubscription(compactSubscriptionOptions(input)),
+        "Edited an Inoreader subscription."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     followSubscriptionToolName,
     {
       description: "Follow a feed and optionally rename it or add it to a folder.",
-      inputSchema: subscriptionEditSchema
+      inputSchema: subscriptionEditSchema,
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
     async (input) =>
-      runTool(client.followSubscription(compactSubscriptionOptions(input)))
+      runTool(
+        client.followSubscription(compactSubscriptionOptions(input)),
+        "Followed an Inoreader subscription."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     unfollowSubscriptionToolName,
     {
       description: "Unfollow an Inoreader feed.",
       inputSchema: z.object({
         streamId: z.string().min(1)
-      })
+      }),
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ streamId }) => runTool(client.unfollowSubscription(streamId))
+    async ({ streamId }) =>
+      runTool(
+        client.unfollowSubscription(streamId),
+        "Unfollowed an Inoreader subscription."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     renameTagToolName,
     {
       description: "Rename an Inoreader tag or folder.",
       inputSchema: z.object({
         sourceTagId: z.string().min(1),
         destinationName: z.string().min(1)
-      })
+      }),
+      outputSchema: okOutputSchema,
+      annotations: nonDestructiveWriteAnnotations
     },
     async ({ sourceTagId, destinationName }) =>
-      runTool(client.renameTag(sourceTagId, destinationName))
+      runTool(
+        client.renameTag(sourceTagId, destinationName),
+        "Renamed an Inoreader tag."
+      )
   );
 
-  server.registerTool(
+  registerTool(
     deleteTagToolName,
     {
       description: "Delete an Inoreader tag or folder.",
       inputSchema: z.object({
         tagId: z.string().min(1)
-      })
+      }),
+      outputSchema: okOutputSchema,
+      annotations: destructiveWriteAnnotations
     },
-    async ({ tagId }) => runTool(client.deleteTag(tagId))
+    async ({ tagId }) =>
+      runTool(client.deleteTag(tagId), "Deleted an Inoreader tag.")
   );
 
   return {
     metadata,
     server,
+    toolMetadata,
+    registeredTools,
     toolNames: [
       statusToolName,
       getUserInfoToolName,

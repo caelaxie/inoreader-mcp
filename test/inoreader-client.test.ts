@@ -192,4 +192,139 @@ describe("createInoreaderClient", () => {
       _tag: "InoreaderRateLimitError"
     });
   });
+
+  it("maps HTTP 401 and 403 responses to auth errors", async () => {
+    for (const status of [401, 403]) {
+      const client = createInoreaderClient(
+        {
+          appName: "inoreader-mcp",
+          appVersion: "1.0.0",
+          inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+          inoreaderAccessToken: "secret-token"
+        },
+        () => Effect.succeed({ status, body: "Unauthorized" })
+      );
+
+      await expect(
+        Effect.runPromise(Effect.flip(client.getUserInfo()))
+      ).resolves.toMatchObject({
+        _tag: "InoreaderAuthError",
+        status
+      });
+    }
+  });
+
+  it("maps invalid response bodies to decode errors", async () => {
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      () => Effect.succeed({ status: 200, body: { unexpected: true } })
+    );
+
+    await expect(
+      Effect.runPromise(Effect.flip(client.getUnreadCounts()))
+    ).resolves.toMatchObject({
+      _tag: "InoreaderDecodeError"
+    });
+  });
+
+  it("maps non-auth HTTP failures to HTTP errors with status and body", async () => {
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      () => Effect.succeed({ status: 500, body: { error: "upstream" } })
+    );
+
+    await expect(
+      Effect.runPromise(Effect.flip(client.getUnreadCounts()))
+    ).resolves.toMatchObject({
+      _tag: "InoreaderHttpError",
+      status: 500,
+      body: "{\"error\":\"upstream\"}"
+    });
+  });
+
+  it("encodes subscription edit actions with descriptive client options", async () => {
+    const requests: Parameters<InoreaderHttpTransport>[0][] = [];
+    const transport: InoreaderHttpTransport = (request) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return { status: 200, body: "OK" };
+      });
+
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      transport
+    );
+
+    await Effect.runPromise(
+      client.editSubscription({
+        streamId: "feed/https://example.test/feed.xml",
+        title: "Example Feed",
+        addFolderId: "user/-/label/Tech",
+        removeFolderId: "user/-/label/Old"
+      })
+    );
+
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      path: "/subscription/edit"
+    });
+    expect(requests[0]?.query).toEqual([
+      ["ac", "edit"],
+      ["s", "feed/https://example.test/feed.xml"],
+      ["t", "Example Feed"],
+      ["a", "user/-/label/Tech"],
+      ["r", "user/-/label/Old"]
+    ]);
+  });
+
+  it("encodes tag rename and delete requests", async () => {
+    const requests: Parameters<InoreaderHttpTransport>[0][] = [];
+    const transport: InoreaderHttpTransport = (request) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return { status: 200, body: "OK" };
+      });
+
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      transport
+    );
+
+    await Effect.runPromise(client.renameTag("user/-/label/Old", "New Label"));
+    await Effect.runPromise(client.deleteTag("user/-/label/New Label"));
+
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      path: "/rename-tag",
+      query: [
+        ["s", "user/-/label/Old"],
+        ["dest", "New Label"]
+      ]
+    });
+    expect(requests[1]).toMatchObject({
+      method: "POST",
+      path: "/disable-tag",
+      query: [["s", "user/-/label/New Label"]]
+    });
+  });
 });

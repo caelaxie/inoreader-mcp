@@ -31,6 +31,14 @@ INOREADER_ACCESS_TOKEN=your-token
 
 `INOREADER_ACCESS_TOKEN` is required for authenticated Inoreader tools. The status tool can run without it and reports only whether the token is configured.
 
+## MCP Responses
+
+Successful API-backed tools return concise text for the model and `structuredContent` for MCP clients that consume JSON output programmatically.
+
+API and client failures are returned as MCP tool-level errors with `isError: true` and a readable message. They are not thrown as protocol errors unless the MCP server itself cannot handle the request.
+
+Read tools are annotated as read-only and idempotent. Write tools are annotated as state-changing, and operations that remove or hide user-visible Inoreader state are marked destructive.
+
 ## Scripts
 
 ```bash
