@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inoreader-mcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-05-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "INOREADER_CREDENTIALS",
+        "class_name": "InoreaderCredentials"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["InoreaderCredentials"]
+    }
+  ],
+  "vars": {
+    "INOREADER_API_BASE_URL": "https://www.inoreader.com/reader/api/0",
+    "INOREADER_OAUTH_TOKEN_URL": "https://www.inoreader.com/oauth2/token"
+  }
+}

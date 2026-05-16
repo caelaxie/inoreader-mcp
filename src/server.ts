@@ -13,7 +13,7 @@ import {
   createLiveInoreaderHttpTransport,
   type InoreaderClient
 } from "./inoreader/client.js";
-import { createInoreaderOAuthTokenProvider } from "./inoreader/oauth.js";
+import { InoreaderAuthError } from "./inoreader/errors.js";
 
 const statusToolName = "inoreader_status";
 const getUserInfoToolName = "inoreader_get_user_info";
@@ -123,6 +123,7 @@ export interface InoreaderMcpServer {
 
 export interface InoreaderMcpServerOptions {
   readonly client?: InoreaderClient;
+  readonly oauthConfigured?: boolean;
 }
 
 export const createInoreaderMcpServer = (
@@ -136,12 +137,18 @@ export const createInoreaderMcpServer = (
   const client =
     options.client ??
     createInoreaderClient(
-      createInoreaderOAuthTokenProvider(config),
+      () =>
+        Effect.fail(
+          new InoreaderAuthError({
+            message:
+              "Inoreader OAuth credentials are missing. Visit the remote MCP setup URL first."
+          })
+        ),
       createLiveInoreaderHttpTransport(config.inoreaderApiBaseUrl)
     );
   const server = new McpServer(metadata, {
     instructions:
-      "Use this local MCP server to interact with Inoreader. Configure Inoreader OAuth credentials before calling tools that require account access."
+      "Use this remote MCP server to interact with Inoreader. Configure Inoreader OAuth through the Cloudflare Worker setup route before calling account tools."
   });
 
   const successResult = (
@@ -246,7 +253,7 @@ export const createInoreaderMcpServer = (
     statusToolName,
     {
       description:
-        "Report whether the local Inoreader MCP server is configured and reachable.",
+        "Report whether the remote Inoreader MCP server is configured and reachable.",
       inputSchema: z.object({}),
       outputSchema: statusOutputSchema,
       annotations: readToolAnnotations
@@ -256,11 +263,7 @@ export const createInoreaderMcpServer = (
         ok: true,
         service: config.appName,
         inoreaderApiBaseUrl: config.inoreaderApiBaseUrl,
-        inoreaderOAuthConfigured: Boolean(
-          config.inoreaderClientId &&
-            config.inoreaderClientSecret &&
-            config.inoreaderRefreshToken
-        )
+        inoreaderOAuthConfigured: options.oauthConfigured ?? false
       })
   );
 

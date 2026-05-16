@@ -1,76 +1,146 @@
 # Inoreader MCP
 
-## Set up Inoreader MCP
+Remote Cloudflare MCP server for Inoreader.
 
-This MCP server runs over stdio and is designed to be launched by an AI agent with `npx`.
+## Deploy
+
+1. Install dependencies and sign in to Cloudflare:
+
+```bash
+pnpm install
+pnpm wrangler login
+```
+
+2. Choose the deployed Worker URL.
+
+By default this project deploys the Worker named `inoreader-mcp`. Use the final
+Worker URL from your Cloudflare account, for example:
+
+```text
+https://inoreader-mcp.<your-workers-subdomain>.workers.dev
+```
+
+If you use a custom domain or route, update `wrangler.jsonc` first and use that
+host instead.
+
+3. Register an app in Inoreader preferences:
+
+```text
+https://www.inoreader.com/preferences/other
+```
+
+Use your deployed Worker callback URL as the redirect URI:
+
+```text
+https://<your-worker-domain>/callback
+```
+
+Inoreader labels the OAuth credentials as `App ID` and `App key`.
+
+4. Set Cloudflare Worker secrets from the Inoreader `App ID` and `App key`:
+
+```bash
+pnpm wrangler secret put INOREADER_APP_ID
+pnpm wrangler secret put INOREADER_APP_KEY
+```
+
+5. Deploy the Worker:
+
+```bash
+pnpm run deploy
+```
+
+6. Protect the private Worker paths with Cloudflare Access.
+
+In the Cloudflare dashboard, open Zero Trust, then Access, then Applications.
+Add self-hosted applications for the private paths on the deployed Worker host:
+
+```text
+https://inoreader-mcp.<your-workers-subdomain>.workers.dev/setup
+https://inoreader-mcp.<your-workers-subdomain>.workers.dev/authorize
+https://inoreader-mcp.<your-workers-subdomain>.workers.dev/status
+https://inoreader-mcp.<your-workers-subdomain>.workers.dev/mcp
+```
+
+Add an Allow policy for your email address on `/setup` and `/authorize`. For
+non-browser MCP clients, create an Access service token and add it to an Allow
+policy for `/mcp`.
+
+Do not protect `/callback` with Cloudflare Access. Inoreader must be able to
+redirect the browser back to that path after OAuth, and Inoreader cannot send
+Cloudflare Access service-token headers.
+
+7. Open the setup page in a browser and connect Inoreader:
+
+```text
+https://<your-worker-domain>/setup
+```
+
+The Worker redirects to Inoreader, receives the OAuth callback at `/callback`,
+and stores the Inoreader refresh/access token state in the
+`InoreaderCredentials` Durable Object.
+
+## Connect MCP Clients
+
+Use the remote MCP endpoint directly:
+
+```text
+https://<your-worker-domain>/mcp
+```
+
+MCP clients should send these Cloudflare Access headers when calling `/mcp`:
+
+```http
+CF-Access-Client-Id: <cloudflare-access-client-id>.access
+CF-Access-Client-Secret: <cloudflare-access-client-secret>
+```
+
+Set them in your shell before starting Codex or OpenCode:
+
+```bash
+export CF_ACCESS_CLIENT_ID="<cloudflare-access-client-id>.access"
+export CF_ACCESS_CLIENT_SECRET="<cloudflare-access-client-secret>"
+```
 
 ### Codex
 
-1. Open your Codex config file:
-
-```bash
-$EDITOR ~/.codex/config.toml
-```
-
-2. Add this MCP server entry:
+Add this to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.inoreader]
-command = "npx"
-args = ["-y", "@caelaxie/inoreader-mcp"]
+url = "https://<your-worker-domain>/mcp"
+
+[mcp_servers.inoreader.env_http_headers]
+"CF-Access-Client-Id" = "CF_ACCESS_CLIENT_ID"
+"CF-Access-Client-Secret" = "CF_ACCESS_CLIENT_SECRET"
 ```
 
-3. Save your Inoreader OAuth credentials once:
-
-```bash
-npx -y @caelaxie/inoreader-mcp auth save \
-  --client-id "your-client-id" \
-  --client-secret "your-client-secret" \
-  --refresh-token "your-refresh-token"
-```
-
-4. Restart Codex.
-5. Ask Codex to use the Inoreader MCP tools.
+Restart Codex after changing the config.
 
 ### OpenCode
 
-1. Open your OpenCode config file:
-
-```bash
-$EDITOR ~/.config/opencode/opencode.json
-```
-
-2. Add this MCP server entry inside the top-level `mcp` object:
+Add this to `~/.config/opencode/opencode.json`:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "inoreader": {
-      "type": "local",
-      "command": ["npx", "-y", "@caelaxie/inoreader-mcp"],
-      "enabled": true
+      "type": "remote",
+      "url": "https://<your-worker-domain>/mcp",
+      "enabled": true,
+      "headers": {
+        "CF-Access-Client-Id": "{env:CF_ACCESS_CLIENT_ID}",
+        "CF-Access-Client-Secret": "{env:CF_ACCESS_CLIENT_SECRET}"
+      }
     }
   }
 }
 ```
 
-3. Save your Inoreader OAuth credentials once:
+Restart OpenCode after changing the config.
 
-```bash
-npx -y @caelaxie/inoreader-mcp auth save \
-  --client-id "your-client-id" \
-  --client-secret "your-client-secret" \
-  --refresh-token "your-refresh-token"
-```
-
-4. Restart OpenCode.
-5. Ask OpenCode to use the Inoreader MCP tools.
-
-`auth save` writes OAuth secrets to the system keyring under the `inoreader-mcp` service and stores only non-secret URL overrides in `~/.config/inoreader-mcp/config.json`. After that, MCP clients can launch this server without environment variables. `INOREADER_CLIENT_ID`, `INOREADER_CLIENT_SECRET`, and `INOREADER_REFRESH_TOKEN` are still supported as automation overrides. The MCP server refreshes Inoreader OAuth access tokens in memory and does not accept a static access-token environment variable.
-
-Use Inoreader's OAuth developer flow or OAuth Playground setup to obtain the refresh token for your registered Inoreader app.
-
-`INOREADER_API_BASE_URL` is optional and defaults to `https://www.inoreader.com/reader/api/0`. `INOREADER_OAUTH_TOKEN_URL` is optional and defaults to `https://www.inoreader.com/oauth2/token`.
+Browser access to `/setup` uses your email-based Access policy.
 
 ## Current Tools
 
@@ -97,31 +167,19 @@ Use Inoreader's OAuth developer flow or OAuth Playground setup to obtain the ref
 
 ## Developers
 
-Install dependencies and build the server:
+Install dependencies:
 
 ```bash
 pnpm install
-pnpm build
 ```
 
-Run the server locally:
+Run locally with Wrangler:
 
 ```bash
 pnpm dev
 ```
 
-Save local credentials while developing:
-
-```bash
-pnpm dev auth save \
-  --client-id "your-client-id" \
-  --client-secret "your-client-secret" \
-  --refresh-token "your-refresh-token"
-```
-
-On Linux, the system keyring must be available and unlocked for `auth save` and MCP startup to read saved credentials.
-
-Run checks before changing release metadata or publishing:
+Run checks:
 
 ```bash
 pnpm lint

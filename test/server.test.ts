@@ -9,10 +9,7 @@ const config = {
   appName: "inoreader-mcp",
   appVersion: "1.0.0",
   inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-  inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token",
-  inoreaderClientId: "client-id",
-  inoreaderClientSecret: "client-secret",
-  inoreaderRefreshToken: "refresh-token"
+  inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token"
 };
 
 const makeFakeClient = (
@@ -196,7 +193,10 @@ describe("createInoreaderMcpServer", () => {
   });
 
   it("reports OAuth configuration in the status tool", async () => {
-    const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
+    const server = createInoreaderMcpServer(config, {
+      client: makeFakeClient(),
+      oauthConfigured: true
+    });
     const tool = server.registeredTools.find(
       ({ name }) => name === "inoreader_status"
     );
@@ -218,4 +218,20 @@ describe("createInoreaderMcpServer", () => {
       }
     });
   });
+
+  it("reports missing OAuth configuration without failing status", async () => {
+    const server = createInoreaderMcpServer(config, { client: makeFakeClient() });
+    const tool = server.registeredTools.find(
+      ({ name }) => name === "inoreader_status"
+    );
+
+    const result = await tool?.handler({});
+
+    expect(result).toMatchObject({
+      structuredContent: {
+        inoreaderOAuthConfigured: false
+      }
+    });
+  });
+
 });

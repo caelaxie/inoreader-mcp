@@ -28,23 +28,18 @@ describe("loadConfig", () => {
       appName: "inoreader-mcp",
       appVersion: "1.0.0",
       inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
-      inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token",
-      inoreaderClientId: "client-id",
-      inoreaderClientSecret: "client-secret",
-      inoreaderRefreshToken: "refresh-token"
+      inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token"
     });
   });
 
-  it.each([
-    ["INOREADER_CLIENT_ID"],
-    ["INOREADER_CLIENT_SECRET"],
-    ["INOREADER_REFRESH_TOKEN"]
-  ])("requires %s", async (name) => {
-    const env = { ...oauthEnv };
-    delete env[name as keyof typeof env];
+  it("loads remote MCP defaults without local OAuth credentials", async () => {
+    const config = await Effect.runPromise(loadConfig({}));
 
-    await expect(Effect.runPromise(loadConfig(env))).rejects.toMatchObject({
-      message: `${name} is required`
+    expect(config).toMatchObject({
+      appName: "inoreader-mcp",
+      appVersion: "1.0.0",
+      inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+      inoreaderOAuthTokenUrl: "https://www.inoreader.com/oauth2/token"
     });
   });
 
