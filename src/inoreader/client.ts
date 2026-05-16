@@ -97,7 +97,7 @@ export interface EditSubscriptionOptions {
   readonly removeFolderId?: string;
 }
 
-export interface FollowSubscriptionOptions extends EditSubscriptionOptions {}
+export type FollowSubscriptionOptions = EditSubscriptionOptions;
 
 export interface InoreaderClient {
   readonly getUserInfo: () => Effect.Effect<UserInfo, InoreaderClientError>;
@@ -168,6 +168,27 @@ const broadcastTag = "user/-/state/com.google/broadcast";
 
 const customTag = (tagName: string): string => `user/-/label/${tagName}`;
 
+const decodeResponse = <S extends Schema.Schema.Any>(
+  schema: S,
+  body: unknown
+): Effect.Effect<
+  Schema.Schema.Type<S>,
+  InoreaderDecodeError,
+  Schema.Schema.Context<S>
+> =>
+  Schema.decodeUnknown(schema)(body).pipe(
+    Effect.mapError(
+      (error) =>
+        new InoreaderDecodeError({
+          message: String(error)
+        })
+    )
+  ) as Effect.Effect<
+    Schema.Schema.Type<S>,
+    InoreaderDecodeError,
+    Schema.Schema.Context<S>
+  >;
+
 export const createInoreaderClient = (
   config: InoreaderMcpConfig,
   transport: InoreaderHttpTransport
@@ -230,19 +251,10 @@ export const createInoreaderClient = (
         );
       }
 
-      return yield* Schema.decodeUnknown(schema)(response.body).pipe(
-        Effect.mapError(
-          (error) =>
-            new InoreaderDecodeError({
-              message: String(error)
-            })
-        )
-      );
-    }) as Effect.Effect<
-      Schema.Schema.Type<S>,
-      InoreaderClientError,
-      Schema.Schema.Context<S>
-    >;
+      const decoded = yield* decodeResponse(schema, response.body);
+
+      return decoded;
+    });
 
   const editTag = (
     itemIds: readonly string[],
