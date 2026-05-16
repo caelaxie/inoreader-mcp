@@ -1,6 +1,10 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
+import {
+  createInoreaderClient,
+  type InoreaderHttpTransport
+} from "../src/inoreader/client.js";
 import {
   OkResponseSchema,
   StreamContentsSchema,
@@ -84,6 +88,108 @@ describe("Inoreader schemas", () => {
   it("decodes plain OK write responses", () => {
     expect(Schema.decodeUnknownSync(OkResponseSchema)("OK")).toEqual({
       ok: true
+    });
+  });
+});
+
+describe("createInoreaderClient", () => {
+  it("sends bearer authentication on read requests", async () => {
+    const requests: Parameters<InoreaderHttpTransport>[0][] = [];
+    const transport: InoreaderHttpTransport = (request) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return {
+          status: 200,
+          body: {
+            userId: "1001921515",
+            userName: "reader",
+            userProfileId: "1001921515",
+            userEmail: "reader@example.test",
+            isBloggerUser: false,
+            signupTimeSec: 1163850013,
+            isMultiLoginEnabled: false
+          }
+        };
+      });
+
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      transport
+    );
+
+    await Effect.runPromise(client.getUserInfo());
+
+    expect(requests[0]).toMatchObject({
+      method: "GET",
+      path: "/user-info",
+      headers: { Authorization: "Bearer secret-token" }
+    });
+  });
+
+  it("encodes repeated item IDs for article write requests", async () => {
+    const requests: Parameters<InoreaderHttpTransport>[0][] = [];
+    const transport: InoreaderHttpTransport = (request) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return { status: 200, body: "OK" };
+      });
+
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      transport
+    );
+
+    await Effect.runPromise(client.markRead(["item-1", "item-2"]));
+
+    expect(requests[0]?.query).toEqual([
+      ["a", "user/-/state/com.google/read"],
+      ["i", "item-1"],
+      ["i", "item-2"]
+    ]);
+  });
+
+  it("fails authenticated methods when the token is missing", async () => {
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0"
+      },
+      () => Effect.succeed({ status: 200, body: "OK" })
+    );
+
+    await expect(
+      Effect.runPromise(Effect.flip(client.getUserInfo()))
+    ).resolves.toMatchObject({
+      _tag: "InoreaderAuthError"
+    });
+  });
+
+  it("maps rate limits to tagged errors", async () => {
+    const client = createInoreaderClient(
+      {
+        appName: "inoreader-mcp",
+        appVersion: "1.0.0",
+        inoreaderApiBaseUrl: "https://www.inoreader.com/reader/api/0",
+        inoreaderAccessToken: "secret-token"
+      },
+      () => Effect.succeed({ status: 429, body: "Too many requests" })
+    );
+
+    await expect(
+      Effect.runPromise(Effect.flip(client.getUnreadCounts()))
+    ).resolves.toMatchObject({
+      _tag: "InoreaderRateLimitError"
     });
   });
 });
