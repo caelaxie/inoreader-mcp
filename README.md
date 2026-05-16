@@ -102,9 +102,20 @@ https://inoreader-mcp.<your-workers-subdomain>.workers.dev/status
 https://inoreader-mcp.<your-workers-subdomain>.workers.dev/mcp
 ```
 
-Add an Allow policy for your email address on `/setup` and `/authorize`. For
-non-browser MCP clients, create an Access service token and add it to an Allow
-policy for `/mcp`.
+Add an Allow policy for your email address on `/setup` and `/authorize`.
+
+For non-browser MCP clients, create a Cloudflare Access service token and use it
+for `/mcp`:
+
+1. In the Cloudflare Zero Trust dashboard, open Access, then Service Auth.
+2. Create a service token, for example `inoreader-mcp-codex`, and save the
+   generated Client ID and Client Secret. Cloudflare shows the secret once.
+3. Open the Access application that protects
+   `https://<your-worker-domain>/mcp`.
+4. Add a policy with Action set to Service Auth.
+5. In the Include rules, choose Service Token and select the specific token you
+   created. Do not use Any Access Service Token unless you intentionally want
+   every service token in scope to reach `/mcp`.
 
 Do not protect `/callback` with Cloudflare Access. Inoreader must be able to
 redirect the browser back to that path after OAuth, and Inoreader cannot send
