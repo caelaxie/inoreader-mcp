@@ -17,7 +17,7 @@ $EDITOR ~/.codex/config.toml
 ```toml
 [mcp_servers.inoreader]
 command = "npx"
-args = ["-y", "inoreader-mcp"]
+args = ["-y", "@caelaxie/inoreader-mcp"]
 env = { "INOREADER_ACCESS_TOKEN" = "your-token" }
 ```
 
@@ -39,7 +39,7 @@ $EDITOR ~/.config/opencode/opencode.json
   "mcp": {
     "inoreader": {
       "type": "local",
-      "command": ["npx", "-y", "inoreader-mcp"],
+      "command": ["npx", "-y", "@caelaxie/inoreader-mcp"],
       "enabled": true,
       "environment": {
         "INOREADER_ACCESS_TOKEN": "your-token"
