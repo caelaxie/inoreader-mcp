@@ -22,6 +22,14 @@ describe("loadConfig", () => {
     expect(config.inoreaderApiBaseUrl).toBe("https://example.test/api");
   });
 
+  it("loads an optional Inoreader access token", async () => {
+    const config = await Effect.runPromise(
+      loadConfig({ INOREADER_ACCESS_TOKEN: "secret-token" })
+    );
+
+    expect(config.inoreaderAccessToken).toBe("secret-token");
+  });
+
   it("rejects malformed Inoreader API base URLs", async () => {
     await expect(
       Effect.runPromise(loadConfig({ INOREADER_API_BASE_URL: "not a url" }))
