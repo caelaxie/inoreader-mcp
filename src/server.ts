@@ -151,6 +151,14 @@ export const createInoreaderMcpServer = (
       "Use this remote MCP server to interact with Inoreader. Configure Inoreader OAuth through the Cloudflare Worker setup route before calling account tools."
   });
 
+  const formatPayload = (payload: Record<string, unknown>): string => {
+    try {
+      return JSON.stringify(payload, null, 2);
+    } catch {
+      return "[Unable to serialize payload]";
+    }
+  };
+
   const successResult = (
     message: string,
     payload: Record<string, unknown>
@@ -158,7 +166,7 @@ export const createInoreaderMcpServer = (
     content: [
       {
         type: "text" as const,
-        text: message
+        text: `${message}\n\n${formatPayload(payload)}`
       }
     ],
     structuredContent: payload
